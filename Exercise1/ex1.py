@@ -100,7 +100,7 @@ print('3.1c: the following have "growth" in name:', with_growth)
 print('3.1d: codes: ')
 for i in code_count.items():
     print(i[0], ': ', i[1], '; ')
-print('3.1e: plotting with matplotlib, close the window to continue.')
+print('3.1f: plotting with matplotlib, close the window to continue.')
 labels = [i[0] for i in code_count.items()]
 sizes = [i[1] for i in code_count.items()]
 patches, _ = plt.pie(sizes, startangle=90)
