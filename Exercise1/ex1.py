@@ -1,13 +1,15 @@
 import json
 import os, sys
 import gzip
+from math import log
 
-from goatools import obo_parser
+from goatools import obo_parser, GOEnrichmentStudy
 import Bio.UniProt.GOA as GOA
 import requests
 import matplotlib.pyplot as plt
 
 import utils
+import counter
 
 DATA_PATH = 'data'
 FILE_NAME = 'go-basic.obo'
@@ -84,6 +86,7 @@ with gzip.open('./goa_arabidopsis.gaf.gz', 'rt') as arab_gaf_fp:
 with_not = 0
 have_annotation = 0
 with_growth = []
+growth_dict = {}
 code_count = {}
 a = 0
 for i in arab_funcs:
@@ -93,6 +96,7 @@ for i in arab_funcs:
         have_annotation += 1
     if 'growth' in arab_funcs[i]['DB_Object_Name']:
         with_growth.append(arab_funcs[i]['GO_ID'])
+        growth_dict[i] = arab_funcs[i]
     code_count[arab_funcs[i]['Evidence']] = code_count.get(arab_funcs[i]['Evidence'], 0) + 1
 print('3.1a: {} with NOT ({}%).'.format(with_not, float(with_not)/len(arab_funcs)*100))
 print('3.1b: {} have annotation GO:0048527.'.format(have_annotation))
@@ -108,3 +112,51 @@ plt.legend(patches, labels, loc="best")
 plt.axis('equal')
 plt.tight_layout()
 plt.show()
+
+pop = arab_funcs.keys()
+assoc = {}
+
+for x in arab_funcs:
+    if x not in assoc:
+        assoc[x] = set()
+    assoc[x].add(str(arab_funcs[x]['GO_ID']))
+
+study = growth_dict.keys()
+
+enrichment = GOEnrichmentStudy(pop, assoc, go)
+results = enrichment.run_study(study)
+enrichment.print_summary(results)
+print("4.1a: GO:0030154 has the least depth and therefore most enriched.")
+
+enrichment = GOEnrichmentStudy(pop, assoc, go, alpha=0.01, methods=['bonferroni'])
+results = enrichment.run_study(study)
+enriched = len([i for i in results if i.p_bonferroni <= 0.01])
+print("4.1b: {} terms enriched under Bonferroni p=0.01.".format(enriched))
+
+enrichment = GOEnrichmentStudy(pop, assoc, go, alpha=0.01, methods=['fdr'])
+results = enrichment.run_study(study)
+enriched = len([i for i in results if i.p_fdr <= 0.01])
+print("4.1c: {} terms enriched under false discovery rate p=0.01.".format(enriched))
+
+term_counts = counter.TermCounts(go, arab_funcs)
+
+print("5.1a: Figure 1 has changed, but based on https://i.imgur.com/usDZhxl.jpg, with GO:0044707 merged into GO:0032501, at 4 branches the semantic similarity is 1/4.")
+print("5.1b: Information content of GO:0048364 = {}".format(-1*log(term_counts.get_term_freq('GO:0048364'), 2)))
+
+a = set([i.id for i in go.query_term('GO:0048364').parents])
+b = set([i.id for i in go.query_term('GO:0044707').parents])
+last_expanded = 'b'
+while len(a.intersection(b)) < 1:
+    if last_expanded == 'b':
+        for p in list(a):
+            a_parents += [i.id for i in go.query_term(p).parents]
+        last_expanded = 'a'
+        a = set(a_parents)
+    else:
+        for p in list(b):
+            b_parents += [i.id for i in go.query_term(p).parents]
+        last_expanded = 'b'
+        b = set(b_parents)
+common_ancestor = go.query_term(list(a.intersection(b))[0]).id
+print("5.1c: Deepest common ancestor of GO:0044707 and GO:0048364: ", common_ancestor)
+print("Therefore the Resnik similarity is {}".format(-1*log(term_counts.get_term_freq(common_ancestor), 2)))
