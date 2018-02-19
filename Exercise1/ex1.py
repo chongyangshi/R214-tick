@@ -1,5 +1,11 @@
+import json
 import os, sys
+import gzip
+
 from goatools import obo_parser
+import Bio.UniProt.GOA as GOA
+import requests
+import matplotlib.pyplot as plt
 
 import utils
 
@@ -59,5 +65,46 @@ while len(a.intersection(b)) < 1:
         b = set(b_parents)
 print('2.1f: ', go.query_term(list(a.intersection(b))[0]).name)
 
-file_path = os.path.join(current_path, DATA_PATH, '2_2_a_lineage.png')
-go.draw_lineage('GO:0097190', lineage_img=file_path)
+#file_path = os.path.join(current_path, DATA_PATH, '2_2_a_lineage.png')
+#go.draw_lineage('GO:0097190', lineage_img=file_path)
+# 2.2, 2.3 do not work due to pygraphviz not working.
+
+# XML nolonger available, using JSON.
+json_result = requests.get("https://www.ebi.ac.uk/QuickGO/services/ontology/go/terms/GO:0048527/complete").json()["results"][0]
+print('2.3a: ', json_result["name"], " ", json_result["definition"]["text"])
+json_result = requests.get("https://www.ebi.ac.uk/QuickGO/services/ontology/go/terms/GO:0097178/complete").json()["results"][0]
+print('2.3b: ', json_result["synonyms"])
+
+with gzip.open('./goa_arabidopsis.gaf.gz', 'rt') as arab_gaf_fp:
+    arab_funcs = {}
+    for entry in GOA.gafiterator(arab_gaf_fp):
+        uniprot_id = entry.pop('DB_Object_ID')
+        arab_funcs[uniprot_id] = entry
+
+with_not = 0
+have_annotation = 0
+with_growth = []
+code_count = {}
+a = 0
+for i in arab_funcs:
+    if 'NOT' in arab_funcs[i]['Qualifier']:
+        with_not += 1
+    if arab_funcs[i]['GO_ID'] == 'GO:0048527':
+        have_annotation += 1
+    if 'growth' in arab_funcs[i]['DB_Object_Name']:
+        with_growth.append(arab_funcs[i]['GO_ID'])
+    code_count[arab_funcs[i]['Evidence']] = code_count.get(arab_funcs[i]['Evidence'], 0) + 1
+print('3.1a: {} with NOT ({}%).'.format(with_not, float(with_not)/len(arab_funcs)*100))
+print('3.1b: {} have annotation GO:0048527.'.format(have_annotation))
+print('3.1c: the following have "growth" in name:', with_growth)
+print('3.1d: codes: ')
+for i in code_count.items():
+    print(i[0], ': ', i[1], '; ')
+print('3.1e: plotting with matplotlib, close the window to continue.')
+labels = [i[0] for i in code_count.items()]
+sizes = [i[1] for i in code_count.items()]
+patches, _ = plt.pie(sizes, startangle=90)
+plt.legend(patches, labels, loc="best")
+plt.axis('equal')
+plt.tight_layout()
+plt.show()
